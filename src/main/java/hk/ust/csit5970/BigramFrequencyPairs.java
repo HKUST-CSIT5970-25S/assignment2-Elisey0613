@@ -78,7 +78,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
-		private static int total = 0;
+		private final Map<String, Integer> totalCountMap = new HashMap<>();
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -92,14 +92,25 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			for(IntWritable val:values){
 				sum += val.get();
 			}
-			if(key.getRightElement().toString().equals("")){
-				total = sum;
-		    	VALUE.set(sum);
-		    }
-		    else{
-		    	VALUE.set(sum /(float) total);
-		    }
-			context.write(key, VALUE);
+			String firstWord = key.getLeftElement();
+        		String secondWord = key.getRightElement();
+			if (secondWord.equals("")) {
+		            // 记录某个单词的总出现次数
+		            totalCountMap.put(firstWord, sum);
+		        } else {
+		            // 计算 bigram 频率
+		            int total = totalCountMap.getOrDefault(firstWord, 1); // 避免除零错误
+		            VALUE.set(sum / (float) total);
+		            context.write(key, VALUE);
+		        }
+			// if(key.getRightElement().toString().equals("")){
+			// 	total = sum;
+		 //    	VALUE.set(sum);
+		 //    }
+		 //    else{
+		 //    	VALUE.set(sum /(float) total);
+		 //    }
+			// context.write(key, VALUE);
 		}
 	}
 	
