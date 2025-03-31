@@ -2,9 +2,8 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -46,7 +45,6 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		// Reuse objects to save overhead of object creation.
 		private static final Text KEY = new Text();
 		private static final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
-		private static final Set<String> set= new HashSet<String>();
 
 		@Override
 		public void map(LongWritable key, Text value, Context context)
@@ -57,27 +55,18 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-
-			set.clear();
-
-			for (int i = 0; i < words.length - 1; i++) {
-				if (set.contains(words[i])){
-					continue;
-				}
-				else{
-					STRIPE.clear();
-
-					set.add(words[i]);
-					KEY.set(words[i]);
-
-					for (int j = i + 1; j < words.length;j++)
-						if (words[j - 1].equals(words[i])) {
-							STRIPE.increment(""); // aggregate term
-							STRIPE.increment(words[j]);
-						}
-					context.write(KEY, STRIPE);
-				}
-
+			int i = 0;
+			while (i < words.length-1) 
+			{
+				String left = words[i];
+				String right = words[i + 1];
+				if (left.length() == 0||right.length() == 0) continue;
+				STRIPE.increment(right);
+				STRIPE.increment("");
+				KEY.set(left);
+				context.write(KEY, STRIPE);
+				STRIPE.clear();
+				i++;
 			}
 		}
 	}
@@ -100,29 +89,38 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
-			SUM_STRIPES.clear();
-
-			for (HashMapStringIntWritable stripe : stripes){
-				SUM_STRIPES.plus(stripe);
+			Iterator<HashMapStringIntWritable> iter = stripes.iterator();
+			
+			while (iter.hasNext()) 
+			{
+				SUM_STRIPES.plus(iter.next());
 			}
-				
-			Set<String> keys = SUM_STRIPES.keySet();
+			int margin = 0;
+			if(SUM_STRIPES.containsKey(""))
+			{
+				margin = SUM_STRIPES.get("");
+			}
 
-			float sum = SUM_STRIPES.get("");
-			FREQ.set(SUM_STRIPES.get(""));
-
-			BIGRAM.set(key.toString(), "");
-
-			context.write(BIGRAM, FREQ);
-
-			for (String val : keys) {
-				if (val.equals("") == false){
-					BIGRAM.set(key.toString(), val);
-					FREQ.set(SUM_STRIPES.get(val) / sum);
+			for(Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet())
+			{
+				String word = ((Text) key).toString();
+				String k = entry.getKey();
+				int value = entry.getValue();
+				if(k.equals(""))
+				{
+					FREQ.set(margin);
+					BIGRAM.set(word,k);
 					context.write(BIGRAM, FREQ);
 				}
-
+				else
+				{
+					FREQ.set(value/ (float) margin);
+					BIGRAM.set(word,k);
+					context.write(BIGRAM, FREQ);
+				}
+				
 			}
+			SUM_STRIPES.clear();
 		}
 	}
 
@@ -142,13 +140,11 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
+			Iterator<HashMapStringIntWritable> iter = stripes.iterator();
+			
+			while (iter.hasNext()) SUM_STRIPES.plus(iter.next());
+			context.write(key,SUM_STRIPES);
 			SUM_STRIPES.clear();
-
-			for (HashMapStringIntWritable stripe : stripes){
-				SUM_STRIPES.plus(stripe);
-			}
-				
-			context.write(key, SUM_STRIPES);
 		}
 	}
 
