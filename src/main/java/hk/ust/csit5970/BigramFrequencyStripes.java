@@ -58,7 +58,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-<<<<<<< HEAD
+
 
 			set.clear();
 
@@ -103,7 +103,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
-<<<<<<< HEAD
+
 			SUM_STRIPES.clear();
 
 			for (HashMapStringIntWritable stripe : stripes){
@@ -147,7 +147,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
-<<<<<<< HEAD
+
 			SUM_STRIPES.clear();
 
 			for (HashMapStringIntWritable stripe : stripes){
