@@ -34,220 +34,198 @@ import org.apache.log4j.Logger;
  * Compute the bigram count using the "stripes" approach
  */
 public class BigramFrequencyStripes extends Configured implements Tool {
-	private static final Logger LOG = Logger
-			.getLogger(BigramFrequencyStripes.class);
+    private static final Logger LOG = Logger
+           .getLogger(BigramFrequencyStripes.class);
 
-	/*
-	 * Mapper: emits <word, stripe> where stripe is a hash map
-	 */
-	private static class MyMapper extends
-			Mapper<LongWritable, Text, Text, HashMapStringIntWritable> {
+    /*
+     * Mapper: emits <word, stripe> where stripe is a hash map
+     */
+    private static class MyMapper extends
+            Mapper<LongWritable, Text, Text, HashMapStringIntWritable> {
 
-		// Reuse objects to save overhead of object creation.
-		private static final Text KEY = new Text();
-		private static final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
-		private static final Set<String> set= new HashSet<String>();
+        // Reuse objects to save overhead of object creation.
+        private static final Text KEY = new Text();
+        private static final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
 
-		@Override
-		public void map(LongWritable key, Text value, Context context)
-				throws IOException, InterruptedException {
-			String line = ((Text) value).toString();
-			String[] words = line.trim().split("\\s+");
+        @Override
+        public void map(LongWritable key, Text value, Context context)
+                throws IOException, InterruptedException {
+            String line = ((Text) value).toString();
+            String[] words = line.trim().split("\\s+");
 
-			/*
-			 * TODO: Your implementation goes here.
-			 */
+            if (words.length > 1) {
+                for (int i = 0; i < words.length - 1; i++) {
+                    String previousWord = words[i];
+                    String nextWord = words[i + 1];
+                    if (nextWord.length() == 0) {
+                        continue;
+                    }
+                    KEY.set(previousWord);
+                    STRIPE.increment(nextWord);
+                    context.write(KEY, STRIPE);
+                    STRIPE.clear();
+                }
+            }
+        }
+    }
 
-			set.clear();
+    /*
+     * Reducer to aggregate all stripes associated with each key
+     */
+    private static class MyReducer extends
+            Reducer<Text, HashMapStringIntWritable, PairOfStrings, FloatWritable> {
 
-			for (int i = 0; i < words.length - 1; i++) {
-				if (set.contains(words[i])){
-					continue;
-				}
-				else{
-					STRIPE.clear();
+        // Reuse objects.
+        private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
+        private final static PairOfStrings BIGRAM = new PairOfStrings();
+        private final static FloatWritable FREQ = new FloatWritable();
 
-					set.add(words[i]);
-					KEY.set(words[i]);
+        @Override
+        public void reduce(Text key,
+                           Iterable<HashMapStringIntWritable> stripes, Context context)
+                throws IOException, InterruptedException {
+            SUM_STRIPES.clear();
+            for (HashMapStringIntWritable stripe : stripes) {
+                SUM_STRIPES.plus(stripe);
+            }
 
-					for (int j = i + 1; j < words.length;j++)
-						if (words[j - 1].equals(words[i])) {
-							STRIPE.increment(""); // aggregate term
-							STRIPE.increment(words[j]);
-						}
-					context.write(KEY, STRIPE);
-				}
+            int totalCount = 0;
+            for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+                totalCount += entry.getValue();
+            }
 
-			}
-		}
-	}
+            // Output the total count
+            PairOfStrings totalKey = new PairOfStrings(key.toString(), "");
+            FREQ.set(totalCount);
+            context.write(totalKey, FREQ);
 
-	/*
-	 * TODO: write your reducer to aggregate all stripes associated with each key
-	 */
-	private static class MyReducer extends
-			Reducer<Text, HashMapStringIntWritable, PairOfStrings, FloatWritable> {
+            // Output the relative frequencies
+            for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
+                float relativeFrequency = (float) entry.getValue() / totalCount;
+                BIGRAM.set(key.toString(), entry.getKey());
+                FREQ.set(relativeFrequency);
+                context.write(BIGRAM, FREQ);
+            }
+        }
+    }
 
-		// Reuse objects.
-		private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
-		private final static PairOfStrings BIGRAM = new PairOfStrings();
-		private final static FloatWritable FREQ = new FloatWritable();
+    /*
+     * Combiner to aggregate all stripes with the same key
+     */
+    private static class MyCombiner
+            extends
+            Reducer<Text, HashMapStringIntWritable, Text, HashMapStringIntWritable> {
+        // Reuse objects.
+        private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
 
-		@Override
-		public void reduce(Text key,
-				Iterable<HashMapStringIntWritable> stripes, Context context)
-				throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here
-			 */
-			SUM_STRIPES.clear();
+        @Override
+        public void reduce(Text key,
+                           Iterable<HashMapStringIntWritable> stripes, Context context)
+                throws IOException, InterruptedException {
+            SUM_STRIPES.clear();
+            for (HashMapStringIntWritable stripe : stripes) {
+                SUM_STRIPES.plus(stripe);
+            }
+            context.write(key, SUM_STRIPES);
+        }
+    }
 
-			for (HashMapStringIntWritable stripe : stripes){
-				SUM_STRIPES.plus(stripe);
-			}
-				
-			Set<String> keys = SUM_STRIPES.keySet();
+    /**
+     * Creates an instance of this tool.
+     */
+    public BigramFrequencyStripes() {
+    }
 
-			float sum = SUM_STRIPES.get("");
-			FREQ.set(SUM_STRIPES.get(""));
+    private static final String INPUT = "input";
+    private static final String OUTPUT = "output";
+    private static final String NUM_REDUCERS = "numReducers";
 
-			BIGRAM.set(key.toString(), "");
+    /**
+     * Runs this tool.
+     */
+    @SuppressWarnings({ "static-access" })
+    public int run(String[] args) throws Exception {
+        Options options = new Options();
 
-			context.write(BIGRAM, FREQ);
+        options.addOption(OptionBuilder.withArgName("path").hasArg()
+               .withDescription("input path").create(INPUT));
+        options.addOption(OptionBuilder.withArgName("path").hasArg()
+               .withDescription("output path").create(OUTPUT));
+        options.addOption(OptionBuilder.withArgName("num").hasArg()
+               .withDescription("number of reducers").create(NUM_REDUCERS));
 
-			for (String val : keys) {
-				if (val.equals("") == false){
-					BIGRAM.set(key.toString(), val);
-					FREQ.set(SUM_STRIPES.get(val) / sum);
-					context.write(BIGRAM, FREQ);
-				}
+        CommandLine cmdline;
+        CommandLineParser parser = new GnuParser();
 
-			}
-		}
-	}
+        try {
+            cmdline = parser.parse(options, args);
+        } catch (ParseException exp) {
+            System.err.println("Error parsing command line: "
+                    + exp.getMessage());
+            return -1;
+        }
 
-	/*
-	 * TODO: Write your combiner to aggregate all stripes with the same key
-	 */
-	private static class MyCombiner
-			extends
-			Reducer<Text, HashMapStringIntWritable, Text, HashMapStringIntWritable> {
-		// Reuse objects.
-		private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
+        // Lack of arguments
+        if (!cmdline.hasOption(INPUT) || !cmdline.hasOption(OUTPUT)) {
+            System.out.println("args: " + Arrays.toString(args));
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.setWidth(120);
+            formatter.printHelp(this.getClass().getName(), options);
+            ToolRunner.printGenericCommandUsage(System.out);
+            return -1;
+        }
 
-		@Override
-		public void reduce(Text key,
-				Iterable<HashMapStringIntWritable> stripes, Context context)
-				throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here
-			 */
-			SUM_STRIPES.clear();
+        String inputPath = cmdline.getOptionValue(INPUT);
+        String outputPath = cmdline.getOptionValue(OUTPUT);
+        int reduceTasks = cmdline.hasOption(NUM_REDUCERS) ? Integer
+               .parseInt(cmdline.getOptionValue(NUM_REDUCERS)) : 1;
 
-			for (HashMapStringIntWritable stripe : stripes){
-				SUM_STRIPES.plus(stripe);
-			}
-				
-			context.write(key, SUM_STRIPES);
-		}
-	}
+        LOG.info("Tool: " + BigramFrequencyStripes.class.getSimpleName());
+        LOG.info(" - input path: " + inputPath);
+        LOG.info(" - output path: " + outputPath);
+        LOG.info(" - number of reducers: " + reduceTasks);
 
-	/**
-	 * Creates an instance of this tool.
-	 */
-	public BigramFrequencyStripes() {
-	}
+        // Create and configure a MapReduce job
+        Configuration conf = getConf();
+        Job job = Job.getInstance(conf);
+        job.setJobName(BigramFrequencyStripes.class.getSimpleName());
+        job.setJarByClass(BigramFrequencyStripes.class);
 
-	private static final String INPUT = "input";
-	private static final String OUTPUT = "output";
-	private static final String NUM_REDUCERS = "numReducers";
+        job.setNumReduceTasks(reduceTasks);
 
-	/**
-	 * Runs this tool.
-	 */
-	@SuppressWarnings({ "static-access" })
-	public int run(String[] args) throws Exception {
-		Options options = new Options();
+        FileInputFormat.setInputPaths(job, new Path(inputPath));
+        FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path").create(INPUT));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("output path").create(OUTPUT));
-		options.addOption(OptionBuilder.withArgName("num").hasArg()
-				.withDescription("number of reducers").create(NUM_REDUCERS));
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(HashMapStringIntWritable.class);
+        job.setOutputKeyClass(PairOfStrings.class);
+        job.setOutputValueClass(FloatWritable.class);
 
-		CommandLine cmdline;
-		CommandLineParser parser = new GnuParser();
+        /*
+         * A MapReduce program consists of four components: a mapper, a reducer,
+         * an optional combiner, and an optional partitioner.
+         */
+        job.setMapperClass(MyMapper.class);
+        job.setCombinerClass(MyCombiner.class);
+        job.setReducerClass(MyReducer.class);
 
-		try {
-			cmdline = parser.parse(options, args);
-		} catch (ParseException exp) {
-			System.err.println("Error parsing command line: "
-					+ exp.getMessage());
-			return -1;
-		}
+        // Delete the output directory if it exists already.
+        Path outputDir = new Path(outputPath);
+        FileSystem.get(conf).delete(outputDir, true);
 
-		// Lack of arguments
-		if (!cmdline.hasOption(INPUT) || !cmdline.hasOption(OUTPUT)) {
-			System.out.println("args: " + Arrays.toString(args));
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.setWidth(120);
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			return -1;
-		}
+        // Time the program
+        long startTime = System.currentTimeMillis();
+        job.waitForCompletion(true);
+        LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
+                / 1000.0 + " seconds");
 
-		String inputPath = cmdline.getOptionValue(INPUT);
-		String outputPath = cmdline.getOptionValue(OUTPUT);
-		int reduceTasks = cmdline.hasOption(NUM_REDUCERS) ? Integer
-				.parseInt(cmdline.getOptionValue(NUM_REDUCERS)) : 1;
+        return 0;
+    }
 
-		LOG.info("Tool: " + BigramFrequencyStripes.class.getSimpleName());
-		LOG.info(" - input path: " + inputPath);
-		LOG.info(" - output path: " + outputPath);
-		LOG.info(" - number of reducers: " + reduceTasks);
-
-		// Create and configure a MapReduce job
-		Configuration conf = getConf();
-		Job job = Job.getInstance(conf);
-		job.setJobName(BigramFrequencyStripes.class.getSimpleName());
-		job.setJarByClass(BigramFrequencyStripes.class);
-
-		job.setNumReduceTasks(reduceTasks);
-
-		FileInputFormat.setInputPaths(job, new Path(inputPath));
-		FileOutputFormat.setOutputPath(job, new Path(outputPath));
-
-		job.setMapOutputKeyClass(Text.class);
-		job.setMapOutputValueClass(HashMapStringIntWritable.class);
-		job.setOutputKeyClass(PairOfStrings.class);
-		job.setOutputValueClass(FloatWritable.class);
-
-		/*
-		 * A MapReduce program consists of four components: a mapper, a reducer,
-		 * an optional combiner, and an optional partitioner.
-		 */
-		job.setMapperClass(MyMapper.class);
-		job.setCombinerClass(MyCombiner.class);
-		job.setReducerClass(MyReducer.class);
-
-		// Delete the output directory if it exists already.
-		Path outputDir = new Path(outputPath);
-		FileSystem.get(conf).delete(outputDir, true);
-
-		// Time the program
-		long startTime = System.currentTimeMillis();
-		job.waitForCompletion(true);
-		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
-				/ 1000.0 + " seconds");
-
-		return 0;
-	}
-
-	/**
-	 * Dispatches command-line arguments to the tool via the {@code ToolRunner}.
-	 */
-	public static void main(String[] args) throws Exception {
-		ToolRunner.run(new BigramFrequencyStripes(), args);
-	}
+    /**
+     * Dispatches command-line arguments to the tool via the {@code ToolRunner}.
+     */
+    public static void main(String[] args) throws Exception {
+        ToolRunner.run(new BigramFrequencyStripes(), args);
+    }
 }
