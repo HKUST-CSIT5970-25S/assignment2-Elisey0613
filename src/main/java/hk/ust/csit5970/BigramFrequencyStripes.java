@@ -54,12 +54,23 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			for (int i = 0; i < words.length - 1; i++) {
+			if (words.length < 2) return;
+        
+		        for (int i = 0; i < words.length - 1; i++) {
+		            // Clean and normalize words
+		            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
+		            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
+		            
+		            if (!first.isEmpty() && !second.isEmpty()) {
+		                // Create a stripe for the current word
 		                STRIPE.clear();
-		                STRIPE.increment(words[i + 1]);
-		                KEY.set(words[i]);
+		                STRIPE.put(second, 1);
+		                
+		                // Emit the stripe
+		                KEY.set(first);
 		                context.write(KEY, STRIPE);
-	                }
+		            }
+		        }
 		}
 	}
 
@@ -82,14 +93,34 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			 * TODO: Your implementation goes here.
 			 */
 			SUM_STRIPES.clear();
+		        float marginal = 0f;
+		        
+		        // Aggregate all stripes for this key
 		        for (HashMapStringIntWritable stripe : stripes) {
-		            SUM_STRIPES.plus(stripe);
+		            for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
+		                String neighbor = entry.getKey();
+		                int count = entry.getValue();
+		                
+		                // Sum up counts for each neighbor
+		                Integer currentCount = SUM_STRIPES.get(neighbor);
+		                SUM_STRIPES.put(neighbor, (currentCount == null ? 0 : currentCount) + count);
+		                marginal += count;
+		            }
 		        }
-		            
-		        int total = SUM_STRIPES.getTotalCount();
+		        
+		        // First output the marginal count
+		        BIGRAM.set(key.toString(), "");
+		        FREQ.set(marginal);
+		        context.write(BIGRAM, FREQ);
+		        
+		        // Then output relative frequencies for each bigram
 		        for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
-		            BIGRAM.set(key.toString(), entry.getKey());
-		            FREQ.set((float) entry.getValue() / total);
+		            String neighbor = entry.getKey();
+		            float count = entry.getValue();
+		            float relativeFreq = count / marginal;
+		            
+		            BIGRAM.set(key.toString(), neighbor);
+		            FREQ.set(relativeFreq);
 		            context.write(BIGRAM, FREQ);
 		        }		
 		}
@@ -112,9 +143,18 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			 * TODO: Your implementation goes here.
 			 */
 			SUM_STRIPES.clear();
+        
+		        // Aggregate all stripes locally
 		        for (HashMapStringIntWritable stripe : stripes) {
-		            SUM_STRIPES.plus(stripe);
+		            for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
+		                String neighbor = entry.getKey();
+		                int count = entry.getValue();
+		                
+		                Integer currentCount = SUM_STRIPES.get(neighbor);
+		                SUM_STRIPES.put(neighbor, (currentCount == null ? 0 : currentCount) + count);
+		            }
 		        }
+		        
 		        context.write(key, SUM_STRIPES);
 		}
 	}
