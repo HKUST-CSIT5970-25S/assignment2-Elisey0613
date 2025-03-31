@@ -3,6 +3,8 @@ package hk.ust.csit5970;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -55,6 +57,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
 			set.clear();
 
 			for (int i = 0; i < words.length - 1; i++) {
@@ -95,7 +98,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 				Iterable<HashMapStringIntWritable> stripes, Context context)
 				throws IOException, InterruptedException {
 			/*
-			 * TODO: Your implementation goes here.
+			 * TODO: Your implementation goes here
 			 */
 			SUM_STRIPES.clear();
 
@@ -119,7 +122,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 					context.write(BIGRAM, FREQ);
 				}
 
-			}		
+			}
 		}
 	}
 
@@ -137,7 +140,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 				Iterable<HashMapStringIntWritable> stripes, Context context)
 				throws IOException, InterruptedException {
 			/*
-			 * TODO: Your implementation goes here.
+			 * TODO: Your implementation goes here
 			 */
 			SUM_STRIPES.clear();
 
