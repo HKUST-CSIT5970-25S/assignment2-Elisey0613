@@ -54,6 +54,34 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			// Clear the stripe for each new line
+		        STRIPE.clear();
+		
+		        // Skip empty lines
+		        if (words.length < 2) return;
+		
+		        for (int i = 0; i < words.length - 1; i++) {
+		            String word1 = words[i].toLowerCase().replaceAll("[^a-z]", "");
+		            String word2 = words[i+1].toLowerCase().replaceAll("[^a-z]", "");
+		
+		            // Skip empty words after cleaning
+		            if (word1.isEmpty() || word2.isEmpty()) continue;
+		
+		            // Update the stripe for current word
+		            KEY.set(word1);
+		            if (STRIPE.containsKey(word2)) {
+		                IntWritable count = STRIPE.get(word2);
+		                count.set(count.get() + 1);
+		            } else {
+		                STRIPE.put(word2, new IntWritable(1));
+		            }
+		
+		            // Emit at the end of each line (alternative: emit per word)
+		            if (i == words.length - 2) {
+		                context.write(KEY, STRIPE);
+		                STRIPE.clear();
+		            }
+		        }
 		}
 	}
 
@@ -75,6 +103,38 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			// Clear the sum stripe
+		        SUM_STRIPES.clear();
+		        int marginal = 0;
+		
+		        // Aggregate all stripes for this key
+		        for (HashMapStringIntWritable stripe : stripes) {
+		            for (Map.Entry<String, IntWritable> entry : stripe.entrySet()) {
+		                String rightWord = entry.getKey();
+		                int count = entry.getValue().get();
+		
+		                // Sum up counts for each right word
+		                if (SUM_STRIPES.containsKey(rightWord)) {
+		                    IntWritable sum = SUM_STRIPES.get(rightWord);
+		                    sum.set(sum.get() + count);
+		                } else {
+		                    SUM_STRIPES.put(rightWord, new IntWritable(count));
+		                }
+		                marginal += count;
+		            }
+		        }
+		
+		        // Output marginal count (A *)
+		        BIGRAM.set(key.toString(), "*");
+		        FREQ.set(marginal);
+		        context.write(BIGRAM, FREQ);
+		
+		        // Output relative frequencies (A B)
+		        for (Map.Entry<String, IntWritable> entry : SUM_STRIPES.entrySet()) {
+		            BIGRAM.set(key.toString(), entry.getKey());
+		            FREQ.set(entry.getValue().get() / (float)marginal);
+		            context.write(BIGRAM, FREQ);
+		        }		
 		}
 	}
 
@@ -94,6 +154,26 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			// Clear the sum stripe
+		        SUM_STRIPES.clear();
+		
+		        // Aggregate all stripes for this key
+		        for (HashMapStringIntWritable stripe : stripes) {
+		            for (Map.Entry<String, IntWritable> entry : stripe.entrySet()) {
+		                String rightWord = entry.getKey();
+		                int count = entry.getValue().get();
+		
+		                // Sum up counts for each right word
+		                if (SUM_STRIPES.containsKey(rightWord)) {
+		                    IntWritable sum = SUM_STRIPES.get(rightWord);
+		                    sum.set(sum.get() + count);
+		                } else {
+		                    SUM_STRIPES.put(rightWord, new IntWritable(count));
+		                }
+                            }	
+		        }
+			// Emit the combined stripe
+        		context.write(key, SUM_STRIPES);
 		}
 	}
 
