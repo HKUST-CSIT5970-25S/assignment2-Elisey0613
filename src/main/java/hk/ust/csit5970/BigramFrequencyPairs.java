@@ -93,7 +93,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
                 context.write(new PairOfStrings(left, ""), new FloatWritable(sum));
             } else {
                 // This is a bigram count
-                if (left.equals(currentWord) {
+                if (left.equals(currentWord) ){
                     float relFreq = sum / currentMarginal;
                     VALUE.set(relFreq);
                     context.write(key, VALUE);
