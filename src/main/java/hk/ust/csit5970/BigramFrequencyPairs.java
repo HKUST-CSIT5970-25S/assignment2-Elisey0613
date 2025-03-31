@@ -46,16 +46,18 @@ public class BigramFrequencyPairs extends Configured implements Tool {
             if (words.length < 2) return;
             
             for (int i = 0; i < words.length - 1; i++) {
-                String word1 = words[i];
-                String word2 = words[i+1];
+                String word1 = words[i].trim();
+                String word2 = words[i+1].trim();
                 
-                // Emit the bigram
-                BIGRAM.set(word1, word2);
-                context.write(BIGRAM, ONE);
-                
-                // Emit the left word with empty right for total count
-                BIGRAM.set(word1, "");
-                context.write(BIGRAM, ONE);
+                if (!word1.isEmpty() && !word2.isEmpty()) {
+                    // Emit the bigram
+                    BIGRAM.set(word1, word2);
+                    context.write(BIGRAM, ONE);
+                    
+                    // Emit the left word with empty right for total count
+                    BIGRAM.set(word1, "");
+                    context.write(BIGRAM, ONE);
+                }
             }
         }
     }
@@ -105,9 +107,11 @@ public class BigramFrequencyPairs extends Configured implements Tool {
                             new FloatWritable(marginal));
             } else {
                 // Calculate relative frequency
-                float relativeFreq = sum / marginal;
-                VALUE.set(relativeFreq);
-                context.write(key, VALUE);
+                if (marginal > 0) {
+                    float relativeFreq = (float) sum / marginal;
+                    VALUE.set(relativeFreq);
+                    context.write(key, VALUE);
+                }
             }
         }
     }
