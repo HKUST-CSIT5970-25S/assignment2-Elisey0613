@@ -37,93 +37,181 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 	/*
 	 * TODO: write your Mapper here
 	 */
+	// private static class MyMapper extends
+	// 		Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
+
+	// 	// Reuse objects to save overhead of object creation.
+	// 	private static final IntWritable ONE = new IntWritable(1);
+	// 	private static final PairOfStrings BIGRAM = new PairOfStrings();
+
+	// 	@Override
+	// 	public void map(LongWritable key, Text value, Context context)
+	// 			throws IOException, InterruptedException {
+	// 		String line = ((Text) value).toString();
+	// 		String[] words = line.trim().split("\\s+");
+			
+	// 		/*
+	// 		 * TODO: Your implementation goes here.
+	// 		 */
+	// 		for (int i = 0; i < words.length - 1; i++){
+	// 			if (words[i].length() == 0){
+	// 				continue;
+	// 			}
+
+	// 			String FirstWord = words[i];
+	// 			String SecondWord = words[i+1];
+
+	// 			BIGRAM.set(FirstWord,SecondWord);
+	// 			context.write(BIGRAM, ONE);
+
+	// 			BIGRAM.set(FirstWord,"");
+	// 			context.write(BIGRAM,ONE);
+	// 		}
+	// 	}
+	// }
+
+	// /*
+	//  * TODO: Write your reducer here
+	//  */
+	// private static class MyReducer extends
+	// 		Reducer<PairOfStrings, IntWritable, PairOfStrings, FloatWritable> {
+
+	// 	// Reuse objects.
+	// 	private final static FloatWritable VALUE = new FloatWritable();
+	// 	private static int total = 0;
+
+	// 	@Override
+	// 	public void reduce(PairOfStrings key, Iterable<IntWritable> values,
+	// 			Context context) throws IOException, InterruptedException {
+	// 		/*
+	// 		 * TODO: Your implementation goes here.
+	// 		 */
+			
+	// 	    // Sum up values.
+	// 		int sum = 0;
+	// 		for(IntWritable val:values){
+	// 			sum += val.get();
+	// 		}
+	// 		if(key.getRightElement().toString().equals("")){
+	// 			total = sum;
+	// 	    		VALUE.set(sum);
+	// 	    }
+	// 	    else if (total > 0) {
+ //       		        VALUE.set(sum / (float) total);
+	// 	    } else {
+	// 	        VALUE.set(0);  // 避免除以 0
+	// 	    }
+	// 		context.write(key, VALUE);
+	// 	}
+	// }
+	
+	// private static class MyCombiner extends
+	// 		Reducer<PairOfStrings, IntWritable, PairOfStrings, IntWritable> {
+	// 	private static final IntWritable SUM = new IntWritable();
+
+	// 	@Override
+	// 	public void reduce(PairOfStrings key, Iterable<IntWritable> values,
+	// 			Context context) throws IOException, InterruptedException {
+	// 		/*
+	// 		 * TODO: Your implementation goes here.
+	// 		 */
+			
+	// 		int sum = 0;
+	// 		for(IntWritable val:values){
+	// 			sum += val.get();
+	// 		}
+	// 		SUM.set(sum);
+	// 		context.write(key, SUM);
+
+	// 	}
+	// }
+
 	private static class MyMapper extends
-			Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
+        Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
 
-		// Reuse objects to save overhead of object creation.
-		private static final IntWritable ONE = new IntWritable(1);
-		private static final PairOfStrings BIGRAM = new PairOfStrings();
-
-		@Override
-		public void map(LongWritable key, Text value, Context context)
-				throws IOException, InterruptedException {
-			String line = ((Text) value).toString();
-			String[] words = line.trim().split("\\s+");
-			
-			/*
-			 * TODO: Your implementation goes here.
-			 */
-			for (int i = 0; i < words.length - 1; i++){
-				if (words[i].length() == 0){
-					continue;
-				}
-
-				String FirstWord = words[i];
-				String SecondWord = words[i+1];
-
-				BIGRAM.set(FirstWord,SecondWord);
-				context.write(BIGRAM, ONE);
-
-				BIGRAM.set(FirstWord,"");
-				context.write(BIGRAM,ONE);
-			}
-		}
+	    private static final IntWritable ONE = new IntWritable(1);
+	    private static final PairOfStrings BIGRAM = new PairOfStrings();
+	    private static final Text ASTERISK = new Text("*");
+	
+	    @Override
+	    public void map(LongWritable key, Text value, Context context)
+	            throws IOException, InterruptedException {
+	        String line = value.toString();
+	        String[] words = line.trim().split("\\s+");
+	        
+	        if (words.length < 2) return;
+	        
+	        for (int i = 0; i < words.length - 1; i++) {
+	            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
+	            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
+	            
+	            if (!first.isEmpty() && !second.isEmpty()) {
+	                // Emit the actual bigram
+	                BIGRAM.set(first, second);
+	                context.write(BIGRAM, ONE);
+	                
+	                // Emit special key for marginal count
+	                BIGRAM.set(first, ASTERISK.toString());
+	                context.write(BIGRAM, ONE);
+	            }
+	        }
+	    }
 	}
-
-	/*
-	 * TODO: Write your reducer here
-	 */
+	
 	private static class MyReducer extends
-			Reducer<PairOfStrings, IntWritable, PairOfStrings, FloatWritable> {
-
-		// Reuse objects.
-		private final static FloatWritable VALUE = new FloatWritable();
-		private static int total = 0;
-
-		@Override
-		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
-				Context context) throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here.
-			 */
-			
-		    // Sum up values.
-			int sum = 0;
-			for(IntWritable val:values){
-				sum += val.get();
-			}
-			if(key.getRightElement().toString().equals("")){
-				total = sum;
-		    		VALUE.set(sum);
-		    }
-		    else if (total > 0) {
-       		        VALUE.set(sum / (float) total);
-		    } else {
-		        VALUE.set(0);  // 避免除以 0
-		    }
-			context.write(key, VALUE);
-		}
+	        Reducer<PairOfStrings, IntWritable, Text, DoubleWritable> {
+	
+	    private final static DoubleWritable RESULT = new DoubleWritable();
+	    private String currentWord = null;
+	    private double marginal = 0.0;
+	
+	    @Override
+	    public void reduce(PairOfStrings key, Iterable<IntWritable> values,
+	            Context context) throws IOException, InterruptedException {
+	        
+	        String leftWord = key.getLeftElement();
+	        String rightWord = key.getRightElement();
+	        
+	        // Calculate sum of counts
+	        int sum = 0;
+	        for (IntWritable val : values) {
+	            sum += val.get();
+	        }
+	        
+	        if (rightWord.equals("*")) {
+	            // This is the marginal count for the left word
+	            currentWord = leftWord;
+	            marginal = sum;
+	            // Output the marginal count first (format: "word\t\tcount")
+	            context.write(new Text(leftWord + "\t"), new DoubleWritable(marginal));
+	        } else {
+	            // This is a bigram count - calculate relative frequency
+	            if (!leftWord.equals(currentWord)) {
+	                throw new IllegalStateException("Missing marginal for " + leftWord);
+	            }
+	            
+	            double relativeFreq = sum / marginal;
+	            RESULT.set(relativeFreq);
+	            // Output the bigram with relative frequency (format: "word1\tword2\tfreq")
+	            context.write(new Text(leftWord + "\t" + rightWord), RESULT);
+	        }
+	    }
 	}
 	
 	private static class MyCombiner extends
-			Reducer<PairOfStrings, IntWritable, PairOfStrings, IntWritable> {
-		private static final IntWritable SUM = new IntWritable();
-
-		@Override
-		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
-				Context context) throws IOException, InterruptedException {
-			/*
-			 * TODO: Your implementation goes here.
-			 */
-			
-			int sum = 0;
-			for(IntWritable val:values){
-				sum += val.get();
-			}
-			SUM.set(sum);
-			context.write(key, SUM);
-
-		}
+	        Reducer<PairOfStrings, IntWritable, PairOfStrings, IntWritable> {
+	    private static final IntWritable SUM = new IntWritable();
+	
+	    @Override
+	    public void reduce(PairOfStrings key, Iterable<IntWritable> values,
+	            Context context) throws IOException, InterruptedException {
+	        int sum = 0;
+	        for (IntWritable val : values) {
+	            sum += val.get();
+	        }
+	        SUM.set(sum);
+	        context.write(key, SUM);
+	    }
 	}
 
 	/*
