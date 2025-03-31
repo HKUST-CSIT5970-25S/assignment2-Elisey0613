@@ -54,15 +54,22 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			if (words.length < 2) return; // Need at least a bigram
-
+			if (words.length < 2) return;
+        
 		        for (int i = 0; i < words.length - 1; i++) {
-		            BIGRAM.set(words[i], words[i + 1]);
-		            context.write(BIGRAM, ONE);
+		            // Clean and normalize words
+		            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
+		            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
 		            
-		            // Emit count for left word (to calculate total occurrences of Wn-1)
-		            BIGRAM.set(words[i], "");
-		            context.write(BIGRAM, ONE);
+		            if (!first.isEmpty() && !second.isEmpty()) {
+		                // Emit the actual bigram
+		                BIGRAM.set(first, second);
+		                context.write(BIGRAM, ONE);
+		                
+		                // Emit special key for marginal count
+		                BIGRAM.set(first, "*");
+		                context.write(BIGRAM, ONE);
+		            }
 		        }
 			
 		}
@@ -76,8 +83,8 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
-		private float marginal = 0;
-		private String currentWord = "";
+		private String currentLeftWord = null;
+   		private float marginal = 0f;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -85,20 +92,29 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			int sum = 0;
+			String leftWord = key.getLeftElement();
+		        String rightWord = key.getRightElement();
+		        
+		        // Calculate sum of counts
+		        int sum = 0;
 		        for (IntWritable val : values) {
 		            sum += val.get();
 		        }
 		        
-		        // If key is (Wn-1, ""), update total count for this word
-		        if (key.getRightElement().isEmpty()) {
-		            totalCount = sum;
-		            currentWord = key.getLeftElement();
-		            context.write(key, new FloatWritable(totalCount));
+		        if (rightWord.equals("*")) {
+		            // This is the marginal count for the left word
+		            currentLeftWord = leftWord;
+		            marginal = sum;
+		            // Output the marginal count
+		            context.write(new PairOfStrings(leftWord, ""), new FloatWritable(marginal));
 		        } else {
-		            // Compute conditional probability P(Wn | Wn-1)
-		            float probability = (float) sum / totalCount;
-		            VALUE.set(probability);
+		            // This is a bigram count - calculate relative frequency
+		            if (!leftWord.equals(currentLeftWord)) {
+		                throw new IllegalStateException("Encountered bigram without marginal count");
+		            }
+		            
+		            float relativeFrequency = sum / marginal;
+		            VALUE.set(relativeFrequency);
 		            context.write(key, VALUE);
 		        }
 			
