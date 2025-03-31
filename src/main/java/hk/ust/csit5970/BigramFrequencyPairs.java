@@ -39,97 +39,84 @@ public class BigramFrequencyPairs extends Configured implements Tool {
      * Mapper: emits <bigram, 1>, where bigram = (leftWord, rightWord)
      */
     private static class MyMapper extends
-            Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
+        Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
 
-        // Reuse objects to save overhead of object creation.
-        private static final IntWritable ONE = new IntWritable(1);
-        private static final PairOfStrings BIGRAM = new PairOfStrings();
-
-        @Override
-        public void map(LongWritable key, Text value, Context context)
-                throws IOException, InterruptedException {
-            String line = ((Text) value).toString();
-            String[] words = line.trim().split("\\s+");
-
-            if (words.length > 1) {
-                String previous_word = words[0];
-                for (int i = 1; i < words.length; i++) {
-                    String w = words[i];
-                    // Skip empty words
-                    if (w.length() == 0) {
-                        continue;
-                    }
-                    BIGRAM.set(previous_word, w);
-                    context.write(BIGRAM, ONE);
-                    previous_word = w;
-                }
-            }
-        }
-    }
+	    private static final IntWritable ONE = new IntWritable(1);
+	    private static final PairOfStrings BIGRAM = new PairOfStrings();
+	
+	    @Override
+	    public void map(LongWritable key, Text value, Context context)
+	            throws IOException, InterruptedException {
+	        String line = value.toString();
+	        String[] words = line.trim().split("\\s+");
+	        
+	        if (words.length < 2) return; // Skip lines with single word
+	        
+	        // Emit each bigram with count 1
+	        for (int i = 0; i < words.length - 1; i++) {
+	            String word1 = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
+	            String word2 = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
+	            
+	            if (!word1.isEmpty() && !word2.isEmpty()) {
+	                BIGRAM.set(word1, word2);
+	                context.write(BIGRAM, ONE);
+	                
+	                // Also emit the left word with empty right for total count
+	                BIGRAM.set(word1, "");
+	                context.write(BIGRAM, ONE);
+	            }
+	        }
+	    }
+	}
 
     /*
      * Reducer: compute bigram relative frequencies
      */
 	private static class MyReducer extends
-			Reducer<PairOfStrings, IntWritable, PairOfStrings, FloatWritable> {
+        Reducer<PairOfStrings, IntWritable, PairOfStrings, FloatWritable> {
 
-		// Reuse objects.
-		private final static FloatWritable VALUE = new FloatWritable();
-		private String prevLeft = null;
-		private int totalCount = 0;
-		private java.util.ArrayList<PairOfStrings> currentPairs = new java.util.ArrayList<PairOfStrings>();
-		private java.util.ArrayList<Integer> currentCounts = new java.util.ArrayList<Integer>();
-
-		@Override
-		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
-						Context context) throws IOException, InterruptedException {
-			Iterator<IntWritable> iter = values.iterator();
-			int sum = 0;
-			while (iter.hasNext()) {
-				sum += iter.next().get();
-			}
-
-			if (prevLeft == null || !prevLeft.equals(key.getLeftElement())) {
-				if (prevLeft != null) {
-					// First output the total count
-					PairOfStrings totalKey = new PairOfStrings(prevLeft, "");
-					VALUE.set(totalCount);
-					context.write(totalKey, VALUE);
-
-					// Then output the relative frequencies
-					for (int i = 0; i < currentPairs.size(); i++) {
-						float relativeFrequency = (float) currentCounts.get(i) / totalCount;
-						VALUE.set(relativeFrequency);
-						context.write(currentPairs.get(i), VALUE);
-					}
-				}
-				prevLeft = key.getLeftElement();
-				totalCount = sum;
-				currentPairs.clear();
-				currentCounts.clear();
-			} else {
-				totalCount += sum;
-			}
-			currentPairs.add(key.clone());
-			currentCounts.add(sum);
-		}
-
-		@Override
-		protected void cleanup(Context context) throws IOException, InterruptedException {
-			if (prevLeft != null) {
-				// Output the total count for the last word
-				PairOfStrings totalKey = new PairOfStrings(prevLeft, "");
-				VALUE.set(totalCount);
-				context.write(totalKey, VALUE);
-
-				// Output the relative frequencies for the last word
-				for (int i = 0; i < currentPairs.size(); i++) {
-					float relativeFrequency = (float) currentCounts.get(i) / totalCount;
-					VALUE.set(relativeFrequency);
-					context.write(currentPairs.get(i), VALUE);
-				}
-			}
-		}
+	    private final static FloatWritable VALUE = new FloatWritable();
+	    private float marginal = 0;
+	    private String currentWord = null;
+	    private boolean emittedMarginal = false;
+	
+	    @Override
+	    public void reduce(PairOfStrings key, Iterable<IntWritable> values,
+	            Context context) throws IOException, InterruptedException {
+	        
+	        String leftWord = key.getLeftElement();
+	        String rightWord = key.getRightElement();
+	        
+	        // Calculate the sum of counts for this key
+	        int sum = 0;
+	        for (IntWritable value : values) {
+	            sum += value.get();
+	        }
+	        
+	        if (rightWord.isEmpty()) {
+	            // This is the marginal count (total for left word)
+	            currentWord = leftWord;
+	            marginal = sum;
+	            emittedMarginal = false;
+	            
+	            // Output the total count for the word first
+	            context.write(new PairOfStrings(leftWord, ""), 
+	                         new FloatWritable(marginal));
+	            emittedMarginal = true;
+	        } else {
+	            // Make sure we've emitted the marginal count first
+	            if (!emittedMarginal) {
+	                context.write(new PairOfStrings(leftWord, ""), 
+	                             new FloatWritable(marginal));
+	                emittedMarginal = true;
+	            }
+	            
+	            // Calculate relative frequency
+	            float relativeFreq = sum / marginal;
+	            VALUE.set(relativeFreq);
+	            context.write(key, VALUE);
+	        }
+	    }
 	}
 
     /*
@@ -142,13 +129,12 @@ public class BigramFrequencyPairs extends Configured implements Tool {
         @Override
         public void reduce(PairOfStrings key, Iterable<IntWritable> values,
                            Context context) throws IOException, InterruptedException {
-            Iterator<IntWritable> iter = values.iterator();
             int sum = 0;
-            while (iter.hasNext()) {
-                sum += iter.next().get();
-            }
-            SUM.set(sum);
-            context.write(key, SUM);
+	    for (IntWritable value : values) {
+	        sum += value.get();
+	    }
+	    SUM.set(sum);
+	    context.write(key, SUM);
         }
     }
 
