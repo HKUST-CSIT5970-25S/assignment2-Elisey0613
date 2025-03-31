@@ -33,6 +33,8 @@ public class CORStripes extends Configured implements Tool {
 	 */
 	private static class CORMapper1 extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
+			private final static IntWritable one = new IntWritable(1);
+        	private Text word = new Text();
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
@@ -43,6 +45,11 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while (doc_tokenizer.hasMoreTokens()) {
+                String token = doc_tokenizer.nextToken();
+                word.set(token);
+                context.write(word, one);
+            }
 		}
 	}
 
@@ -51,11 +58,18 @@ public class CORStripes extends Configured implements Tool {
 	 */
 	private static class CORReducer1 extends
 			Reducer<Text, IntWritable, Text, IntWritable> {
+			private IntWritable result = new IntWritable();
 		@Override
 		public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            result.set(sum);
+            context.write(key, result);
 		}
 	}
 
@@ -75,6 +89,21 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			List<String> wordList = new ArrayList<String>(sorted_word_set);
+            for (int i = 0; i < wordList.size(); i++) {
+                String word1 = wordList.get(i);
+                HashMapStringIntWritable stripe = new HashMapStringIntWritable();
+                for (int j = i + 1; j < wordList.size(); j++) {
+                    String word2 = wordList.get(j);
+                    stripe.increment(word2);
+                }
+                Text outputKey = new Text(word1);
+                MapWritable outputValue = new MapWritable();
+                for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
+                    outputValue.put(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+                }
+                context.write(outputKey, outputValue);
+            }
 		}
 	}
 
@@ -89,6 +118,19 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			HashMapStringIntWritable combinedStripe = new HashMapStringIntWritable();
+            for (MapWritable stripe : values) {
+                for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+                    String neighbor = ((Text) entry.getKey()).toString();
+                    int count = ((IntWritable) entry.getValue()).get();
+                    combinedStripe.increment(neighbor, count);
+                }
+            }
+            MapWritable output = new MapWritable();
+            for (Map.Entry<String, Integer> entry : combinedStripe.entrySet()) {
+                output.put(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+            }
+            context.write(key, output);
 		}
 	}
 
@@ -142,6 +184,26 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			HashMapStringIntWritable finalStripe = new HashMapStringIntWritable();
+			for (MapWritable stripe : values) {
+				for (Map.Entry<Writable, Writable> entry : stripe.entrySet()) {
+					String neighbor = ((Text) entry.getKey()).toString();
+					int count = ((IntWritable) entry.getValue()).get();
+					finalStripe.increment(neighbor, count);
+				}
+			}
+
+			String word1 = key.toString();
+			int freqA = word_total_map.containsKey(word1) ? word_total_map.get(word1) : 0;
+			for (Map.Entry<String, Integer> entry : finalStripe.entrySet()) {
+				String word2 = entry.getKey();
+				int freqAB = entry.getValue();
+				int freqB = word_total_map.containsKey(word2) ? word_total_map.get(word2) : 0;
+				double cor = (double) freqAB / (freqA * freqB);
+				PairOfStrings outputKey = new PairOfStrings(word1, word2);
+				DoubleWritable outputValue = new DoubleWritable(cor);
+				context.write(outputKey, outputValue);
+			}
 		}
 	}
 

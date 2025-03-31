@@ -53,6 +53,10 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while (doc_tokenizer.hasMoreTokens()) {
+                String word = doc_tokenizer.nextToken();
+                context.write(new Text(word), new IntWritable(1));
+            }
 		}
 	}
 
@@ -66,6 +70,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -81,6 +90,17 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			Set<String> words = new TreeSet<String>();
+            while (doc_tokenizer.hasMoreTokens()) {
+                words.add(doc_tokenizer.nextToken());
+            }
+            List<String> wordList = new ArrayList<String>(words);
+            for (int i = 0; i < wordList.size(); i++) {
+                for (int j = i + 1; j < wordList.size(); j++) {
+                    PairOfStrings pair = new PairOfStrings(wordList.get(i), wordList.get(j));
+                    context.write(pair, new IntWritable(1));
+                }
+            }
 		}
 	}
 
@@ -93,6 +113,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -145,6 +170,22 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int freqAB = 0;
+            for (IntWritable val : values) {
+                freqAB += val.get();
+            }
+            String wordA = key.getLeftElement();
+            String wordB = key.getRightElement();
+            Integer freqA = word_total_map.get(wordA);
+            if (freqA == null) {
+                freqA = 0;
+            }
+            Integer freqB = word_total_map.get(wordB);
+            if (freqB == null) {
+                freqB = 0;
+            }
+            double cor = (double) freqAB / (freqA * freqB);
+            context.write(key, new DoubleWritable(cor));
 		}
 	}
 

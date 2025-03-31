@@ -35,7 +35,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 	private static final Logger LOG = Logger.getLogger(BigramFrequencyPairs.class);
 
 	/*
-	 * TODO: write your Mapper here.
+	 * TODO: write your Mapper here
 	 */
 	private static class MyMapper extends
 			Mapper<LongWritable, Text, PairOfStrings, IntWritable> {
@@ -53,17 +53,32 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for (int i = 0; i < words.length - 1; i++){
+				if (words[i].length() == 0){
+					continue;
+				}
+
+				String FirstWord = words[i];
+				String SecondWord = words[i+1];
+
+				BIGRAM.set(FirstWord,SecondWord);
+				context.write(BIGRAM, ONE);
+
+				BIGRAM.set(FirstWord,"");
+				context.write(BIGRAM,ONE);
+			}
 		}
 	}
 
 	/*
-	 * TODO: Write your reducer here.
+	 * TODO: Write your reducer here
 	 */
 	private static class MyReducer extends
 			Reducer<PairOfStrings, IntWritable, PairOfStrings, FloatWritable> {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
+		private static int total = 0;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -71,6 +86,20 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			
+		    // Sum up values.
+			int sum = 0;
+			for(IntWritable val:values){
+				sum += val.get();
+			}
+			if(key.getRightElement().toString().equals("")){
+				total = sum;
+		    	VALUE.set(sum);
+		    }
+		    else{
+		    	VALUE.set(sum /(float) total);
+		    }
+			context.write(key, VALUE);
 		}
 	}
 	
@@ -84,6 +113,14 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			
+			int sum = 0;
+			for(IntWritable val:values){
+				sum += val.get();
+			}
+			SUM.set(sum);
+			context.write(key, SUM);
+
 		}
 	}
 
