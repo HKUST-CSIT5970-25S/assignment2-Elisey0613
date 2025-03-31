@@ -92,7 +92,6 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			for(IntWritable val:values){
 				sum += val.get();
 			}
-			System.out.println("Reducer received key: " + key + " with sum: " + sum);
 			if(key.getRightElement().toString().equals("")){
 				total = sum;
 		    		VALUE.set(sum);
