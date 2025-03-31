@@ -2,6 +2,7 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
@@ -57,6 +58,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+<<<<<<< HEAD
 
 			set.clear();
 
@@ -77,6 +79,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 						}
 					context.write(KEY, STRIPE);
 				}
+
 
 			}
 		}
@@ -100,6 +103,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
+<<<<<<< HEAD
 			SUM_STRIPES.clear();
 
 			for (HashMapStringIntWritable stripe : stripes){
@@ -123,6 +127,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 				}
 
 			}
+
 		}
 	}
 
@@ -142,6 +147,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here
 			 */
+<<<<<<< HEAD
 			SUM_STRIPES.clear();
 
 			for (HashMapStringIntWritable stripe : stripes){
@@ -149,6 +155,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			}
 				
 			context.write(key, SUM_STRIPES);
+
 		}
 	}
 
