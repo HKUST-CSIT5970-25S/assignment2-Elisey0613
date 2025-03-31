@@ -44,6 +44,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		// Reuse objects to save overhead of object creation.
 		private static final Text KEY = new Text();
 		private static final HashMapStringIntWritable STRIPE = new HashMapStringIntWritable();
+		private static final Set<String> set= new HashSet<String>();
 
 		@Override
 		public void map(LongWritable key, Text value, Context context)
@@ -54,23 +55,27 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			if (words.length < 2) return;
-        
-		        for (int i = 0; i < words.length - 1; i++) {
-		            // Clean and normalize words
-		            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
-		            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
-		            
-		            if (!first.isEmpty() && !second.isEmpty()) {
-		                // Create a stripe for the current word
-		                STRIPE.clear();
-		                STRIPE.put(second, 1);
-		                
-		                // Emit the stripe
-		                KEY.set(first);
-		                context.write(KEY, STRIPE);
-		            }
-		        }
+			set.clear();
+
+			for (int i = 0; i < words.length - 1; i++) {
+				if (set.contains(words[i])){
+					continue;
+				}
+				else{
+					STRIPE.clear();
+
+					set.add(words[i]);
+					KEY.set(words[i]);
+
+					for (int j = i + 1; j < words.length;j++)
+						if (words[j - 1].equals(words[i])) {
+							STRIPE.increment(""); // aggregate term
+							STRIPE.increment(words[j]);
+						}
+					context.write(KEY, STRIPE);
+				}
+
+			}
 		}
 	}
 
@@ -93,36 +98,28 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			 * TODO: Your implementation goes here.
 			 */
 			SUM_STRIPES.clear();
-		        float marginal = 0f;
-		        
-		        // Aggregate all stripes for this key
-		        for (HashMapStringIntWritable stripe : stripes) {
-		            for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
-		                String neighbor = entry.getKey();
-		                int count = entry.getValue();
-		                
-		                // Sum up counts for each neighbor
-		                Integer currentCount = SUM_STRIPES.get(neighbor);
-		                SUM_STRIPES.put(neighbor, (currentCount == null ? 0 : currentCount) + count);
-		                marginal += count;
-		            }
-		        }
-		        
-		        // First output the marginal count
-		        BIGRAM.set(key.toString(), "");
-		        FREQ.set(marginal);
-		        context.write(BIGRAM, FREQ);
-		        
-		        // Then output relative frequencies for each bigram
-		        for (Map.Entry<String, Integer> entry : SUM_STRIPES.entrySet()) {
-		            String neighbor = entry.getKey();
-		            float count = entry.getValue();
-		            float relativeFreq = count / marginal;
-		            
-		            BIGRAM.set(key.toString(), neighbor);
-		            FREQ.set(relativeFreq);
-		            context.write(BIGRAM, FREQ);
-		        }		
+
+			for (HashMapStringIntWritable stripe : stripes){
+				SUM_STRIPES.plus(stripe);
+			}
+				
+			Set<String> keys = SUM_STRIPES.keySet();
+
+			float sum = SUM_STRIPES.get("");
+			FREQ.set(SUM_STRIPES.get(""));
+
+			BIGRAM.set(key.toString(), "");
+
+			context.write(BIGRAM, FREQ);
+
+			for (String val : keys) {
+				if (val.equals("") == false){
+					BIGRAM.set(key.toString(), val);
+					FREQ.set(SUM_STRIPES.get(val) / sum);
+					context.write(BIGRAM, FREQ);
+				}
+
+			}		
 		}
 	}
 
@@ -143,19 +140,12 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			 * TODO: Your implementation goes here.
 			 */
 			SUM_STRIPES.clear();
-        
-		        // Aggregate all stripes locally
-		        for (HashMapStringIntWritable stripe : stripes) {
-		            for (Map.Entry<String, Integer> entry : stripe.entrySet()) {
-		                String neighbor = entry.getKey();
-		                int count = entry.getValue();
-		                
-		                Integer currentCount = SUM_STRIPES.get(neighbor);
-		                SUM_STRIPES.put(neighbor, (currentCount == null ? 0 : currentCount) + count);
-		            }
-		        }
-		        
-		        context.write(key, SUM_STRIPES);
+
+			for (HashMapStringIntWritable stripe : stripes){
+				SUM_STRIPES.plus(stripe);
+			}
+				
+			context.write(key, SUM_STRIPES);
 		}
 	}
 
