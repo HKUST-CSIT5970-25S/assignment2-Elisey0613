@@ -135,26 +135,46 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 	
 	    @Override
 	    public void map(LongWritable key, Text value, Context context)
-	            throws IOException, InterruptedException {
+            throws IOException, InterruptedException {
+        
+	        // 添加输入日志
+	        System.err.println("=== MAPPER START ===");
+	        System.err.println("Processing input line: " + value.toString());
+	        
 	        String line = value.toString();
 	        String[] words = line.trim().split("\\s+");
 	        
-	        if (words.length < 2) return;
+	        // 添加分割后的单词日志
+	        System.err.println("Split into words: " + Arrays.toString(words));
+	        System.err.println("Number of words: " + words.length);
+	        
+	        if (words.length < 2) {
+	            System.err.println("Skipping line - less than 2 words");
+	            return;
+	        }
 	        
 	        for (int i = 0; i < words.length - 1; i++) {
 	            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
 	            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
 	            
+	            // 添加处理日志
+	            System.err.println("Processing pair: [" + words[i] + "," + words[i+1] + "]");
+	            System.err.println("After cleaning: [" + first + "," + second + "]");
+	            
 	            if (!first.isEmpty() && !second.isEmpty()) {
-	                // Emit the actual bigram
+	                // 添加发射日志
+	                System.err.println("Emitting bigram: (" + first + "," + second + ")");
 	                BIGRAM.set(first, second);
 	                context.write(BIGRAM, ONE);
 	                
-	                // Emit special key for marginal count
+	                System.err.println("Emitting marginal: (" + first + ",*)");
 	                BIGRAM.set(first, ASTERISK.toString());
 	                context.write(BIGRAM, ONE);
+	            } else {
+	                System.err.println("Skipping pair - empty after cleaning");
 	            }
 	        }
+	        System.err.println("=== MAPPER END ===");
 	    }
 	}
 	
