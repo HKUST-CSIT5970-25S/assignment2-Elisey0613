@@ -47,30 +47,26 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
-			// String line = ((Text) value).toString();
-			String line = value.toString().toLowerCase().replaceAll("[^a-zA-Z\s]", "");
+			String line = ((Text) value).toString();
 			String[] words = line.trim().split("\\s+");
 			
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			if (words.length < 2) return;
-        
-		        for (int i = 0; i < words.length - 1; i++) {
-		            // Clean and normalize words
-		            String first = words[i].replaceAll("[^a-zA-Z]", "").toLowerCase();
-		            String second = words[i+1].replaceAll("[^a-zA-Z]", "").toLowerCase();
-		            
-		            if (!first.isEmpty() && !second.isEmpty()) {
-		                // Emit the actual bigram
-		                BIGRAM.set(first, second);
-		                context.write(BIGRAM, ONE);
-		                
-		                // Emit special key for marginal count
-		                BIGRAM.set(first, "*");
-		                context.write(BIGRAM, ONE);
-		            }
-		        }
+			for (int i = 0; i < words.length - 1; i++){
+				if (words[i].length() == 0){
+					continue;
+				}
+
+				String FirstWord = words[i];
+				String SecondWord = words[i+1];
+
+				BIGRAM.set(FirstWord,SecondWord);
+				context.write(BIGRAM, ONE);
+
+				BIGRAM.set(FirstWord,"");
+				context.write(BIGRAM,ONE);
+			}
 			
 		}
 	}
@@ -83,8 +79,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
-		private String currentLeftWord = null;
-   		private float marginal = 0f;
+		private static int total = 0;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -92,31 +87,19 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			String leftWord = key.getLeftElement();
-		        String rightWord = key.getRightElement();
-		        
-		        // Calculate sum of counts
-		        int sum = 0;
-		        for (IntWritable val : values) {
-		            sum += val.get();
+			// Sum up values.
+			int sum = 0;
+			for(IntWritable val:values){
+				sum += val.get();
+			}
+			if(key.getRightElement().toString().equals("")){
+				total = sum;
+		    	VALUE.set(sum);
 		        }
-		        
-		        if (rightWord.equals("*")) {
-		            // This is the marginal count for the left word
-		            currentLeftWord = leftWord;
-		            marginal = sum;
-		            // Output the marginal count
-		            context.write(new PairOfStrings(leftWord, ""), new FloatWritable(marginal));
-		        } else {
-		            // This is a bigram count - calculate relative frequency
-		            if (!leftWord.equals(currentLeftWord)) {
-		                throw new IllegalStateException("Encountered bigram without marginal count");
-		            }
-		            
-		            float relativeFrequency = sum / marginal;
-		            VALUE.set(relativeFrequency);
-		            context.write(key, VALUE);
-		        }
+			else{
+			    VALUE.set(sum /(float) total);
+			}
+			    context.write(key, VALUE);
 			
 		}
 	}
@@ -132,11 +115,11 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			 * TODO: Your implementation goes here.
 			 */
 			int sum = 0;
-		        for (IntWritable val : values) {
-		            sum += val.get();
-		        }
-		        SUM.set(sum);
-		        context.write(key, SUM);
+			for(IntWritable val:values){
+				sum += val.get();
+			}
+			SUM.set(sum);
+			context.write(key, SUM);
 		}
 	}
 
