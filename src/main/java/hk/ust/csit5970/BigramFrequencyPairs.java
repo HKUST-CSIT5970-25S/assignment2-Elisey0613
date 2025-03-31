@@ -43,35 +43,28 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		// Reuse objects to save overhead of object creation.
 		private static final IntWritable ONE = new IntWritable(1);
 		private static final PairOfStrings BIGRAM = new PairOfStrings();
-		private static final Text ASTERISK = new Text("*");
 
 		@Override
 		public void map(LongWritable key, Text value, Context context)
 				throws IOException, InterruptedException {
-			String line = ((Text) value).toString();
+			// String line = ((Text) value).toString();
+			String line = value.toString().toLowerCase().replaceAll("[^a-zA-Z\s]", "");
 			String[] words = line.trim().split("\\s+");
 			
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			// Skip empty lines
-		        if (words.length < 2) return;
-		        
+			if (words.length < 2) return; // Need at least a bigram
+
 		        for (int i = 0; i < words.length - 1; i++) {
-		            String word1 = words[i].toLowerCase().replaceAll("[^a-z]", "");
-		            String word2 = words[i+1].toLowerCase().replaceAll("[^a-z]", "");
-		            
-		            // Skip empty words after cleaning
-		            if (word1.isEmpty() || word2.isEmpty()) continue;
-		            
-		            // Emit actual bigram count
-		            BIGRAM.set(word1, word2);
+		            BIGRAM.set(words[i], words[i + 1]);
 		            context.write(BIGRAM, ONE);
 		            
-		            // Emit marginal count (for denominator)
-		            BIGRAM.set(word1, ASTERISK.toString());
+		            // Emit count for left word (to calculate total occurrences of Wn-1)
+		            BIGRAM.set(words[i], "");
 		            context.write(BIGRAM, ONE);
-			}
+		        }
+			
 		}
 	}
 
@@ -84,6 +77,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
 		private float marginal = 0;
+		private String currentWord = "";
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -91,31 +85,21 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			// Check if this is a marginal count (denominator)
-		        if (key.getRightElement().equals("*")) {
-		            // Sum all counts for this left word
-		            int sum = 0;
-		            for (IntWritable val : values) {
-		                sum += val.get();
-		            }
-		            marginal = sum;
-		            
-		            // Output the marginal count
-		            VALUE.set(sum);
-		            context.write(key, VALUE);
+			int sum = 0;
+		        for (IntWritable val : values) {
+		            sum += val.get();
+		        }
+		        
+		        // If key is (Wn-1, ""), update total count for this word
+		        if (key.getRightElement().isEmpty()) {
+		            totalCount = sum;
+		            currentWord = key.getLeftElement();
+		            context.write(key, new FloatWritable(totalCount));
 		        } else {
-		            // Sum counts for this specific bigram
-		            int sum = 0;
-		            for (IntWritable val : values) {
-		                sum += val.get();
-		            }
-		            
-		            // Calculate and output relative frequency
-		            if (marginal > 0) {
-		                float freq = (float) sum / marginal;
-		                VALUE.set(freq);
-		                context.write(key, VALUE);
-		            }
+		            // Compute conditional probability P(Wn | Wn-1)
+		            float probability = (float) sum / totalCount;
+		            VALUE.set(probability);
+		            context.write(key, VALUE);
 		        }
 			
 		}
@@ -131,8 +115,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
-			// Sum all counts for the same key locally
-		        int sum = 0;
+			int sum = 0;
 		        for (IntWritable val : values) {
 		            sum += val.get();
 		        }
